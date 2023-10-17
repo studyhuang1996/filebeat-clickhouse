@@ -21,13 +21,11 @@ import (
 	"fmt"
 
 	"github.com/elastic/beats/v7/libbeat/beat"
-	"github.com/elastic/beats/v7/libbeat/common"
 	"github.com/elastic/beats/v7/libbeat/outputs"
 	"github.com/elastic/beats/v7/libbeat/outputs/codec"
 	cjson "github.com/elastic/beats/v7/libbeat/outputs/codec/json"
+	"github.com/elastic/elastic-agent-libs/config"
 )
-
-type tableConf map[string][]string
 
 type batchRows map[string]tableData
 
@@ -42,7 +40,8 @@ func init() {
 	outputs.RegisterType("clickhouse", makeClickHouse)
 }
 
-func makeClickHouse(_ outputs.IndexManager, beat beat.Info, observer outputs.Observer, cfg *common.Config) (outputs.Group, error) {
+func makeClickHouse(_ outputs.IndexManager, beat beat.Info, observer outputs.Observer, cfg *config.C) (outputs.Group,
+	error) {
 	config := defaultConfig
 	err := cfg.Unpack(&config)
 	if err != nil {
