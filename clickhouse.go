@@ -27,10 +27,6 @@ import (
 	cjson "github.com/elastic/beats/v7/libbeat/outputs/codec/json"
 )
 
-type ftField struct {
-	Table string `json:"table"`
-}
-
 type tableConf map[string][]string
 
 type batchRows map[string]tableData

@@ -19,7 +19,6 @@ package clickhouse
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -57,9 +56,9 @@ func newClient(cfg Config, observer outputs.Observer, codec codec.Codec, index s
 func (c *client) Connect() error {
 
 	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: c.config.Host,
+		Addr: []string{c.config.Host},
 		Auth: clickhouse.Auth{
-			Database: c.config.Db,
+			Database: c.config.DbName,
 			Username: c.config.UserName,
 			Password: c.config.PassWord,
 		},
@@ -160,85 +159,39 @@ func (c *client) String() string {
 	return "clickhouse"
 }
 
-func (c *client) getTableConf() tableConf {
-	tc := make(tableConf, len(c.config.Tables))
-	for _, v := range c.config.Tables {
-		tc[v.Table] = v.Columns
-	}
-
-	return tc
-}
-
 // split table rows
-func (c *client) getBatchRows(events []publisher.Event) (batchRows, int) {
-	conf := c.getTableConf()
-
+func (c *client) getBatchRows(data []publisher.Event) (batchRows, int) {
 	batchs := make(batchRows)
 	succEventNum := 0
-	for e_key, ev := range events {
-		fields, _ := ev.Content.GetValue("fields")
-		fstr := fmt.Sprintf("%s", fields)
-		tableT := ftField{}
-		if err := json.Unmarshal([]byte(fstr), &tableT); err != nil {
-			c.log.Errorf("parse field json failed, err: %v", err)
-			continue
-		}
-		tableName := tableT.Table
 
-		message, _ := ev.Content.GetValue("message")
-		mstr := fmt.Sprintf("%s", message)
-		messageT := make(map[string]interface{})
-		if err := json.Unmarshal([]byte(mstr), &messageT); err != nil {
-			c.log.Errorf("parse message json failed, err: %v", err)
-			continue
-		}
+	for index := range data {
+		event := &data[index].Content
+		bulkItems := []interface{}{}
 
-		row, err := filterRow(conf[tableName], messageT)
-		if err != nil {
-			c.log.Errorf("filter message column failed, err: %v", err)
-			continue
+		for _, column := range c.config.Columns {
+			row, _ := event.GetValue(column)
+			bulkItems = append(bulkItems, row)
 		}
-
 		succEventNum++
 		lineRow := make([][]interface{}, 0)
 		eventKeys := make([]int, 0)
-		if _, ok := batchs[tableName]; !ok {
-			lineRow = append(lineRow, row)
-			eventKeys = append(eventKeys, e_key)
-		} else {
-			lineRow = batchs[tableName].Rows
-			lineRow = append(lineRow, row)
-
-			eventKeys = batchs[tableName].EventKeys
-			eventKeys = append(eventKeys, e_key)
-		}
-		batchs[tableName] = tableData{
-			Table:     tableName,
-			Columns:   conf[tableName],
+		lineRow = append(lineRow, bulkItems)
+		eventKeys = append(eventKeys, index)
+		batchs[c.config.TableName] = tableData{
+			Table:     c.config.TableName,
+			Columns:   c.config.Columns,
 			Rows:      lineRow,
 			EventKeys: eventKeys,
 		}
 
 	}
-
 	return batchs, succEventNum
-}
-
-func filterRow(column []string, row map[string]interface{}) (line []interface{}, err error) {
-	for _, v := range column {
-		if data, ok := row[v]; ok {
-			line = append(line, data)
-		} else {
-			return nil, errors.New("filter column failed, column: " + v)
-		}
-	}
-	return
 }
 
 func (c *client) sendToTables(v tableData) error {
 	tableName := v.Table
 	columnStr := strings.Join(v.Columns, ",")
-	sql := fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES ", c.config.Db, tableName, columnStr)
+	sql := fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES ", c.config.DbName, tableName, columnStr)
 
 	num := 0
 	for _, line := range v.Rows {

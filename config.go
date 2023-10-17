@@ -19,20 +19,16 @@ package clickhouse
 
 import "github.com/elastic/beats/v7/libbeat/outputs/codec"
 
-type TableList struct {
-	Table   string   `config:"table"`
-	Columns []string `config:"columns"`
-}
-
 type Config struct {
 	Codec      codec.Config `config:"codec"`
-	Host       []string     `config:"host"`
-	Db         string       `config:"db"`
-	UserName   string       `config:"user_name"`
-	PassWord   string       `config:"pass_word"`
+	Host       string       `config:"host"`
+	DbName     string       `config:"db_name"`
+	UserName   string       `config:"username"`
+	PassWord   string       `config:"password"`
 	BatchSize  int          `config:"batch_size"`
 	MaxRetries int          `config:"max_retries"`
-	Tables     []TableList  `config:"tables"`
+	TableName  string       `config:"tables"`
+	Columns    []string     `config:"columns"`
 }
 
 var defaultConfig = Config{}
