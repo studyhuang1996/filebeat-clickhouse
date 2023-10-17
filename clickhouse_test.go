@@ -22,20 +22,7 @@ import (
 	"testing"
 )
 
-type cTable struct {
-	Table   string
-	Columns []string
-}
-
 func TestOutput(t *testing.T) {
 
-	var testConfig Config
-	testConfig.Tables = []TableList{
-		{
-			Table:   "test",
-			Columns: []string{"id", "name"},
-		},
-	}
-
-	fmt.Println(testConfig)
+	fmt.Println("232")
 }
