@@ -27,7 +27,7 @@ type Config struct {
 	PassWord   string       `config:"password"`
 	BatchSize  int          `config:"batch_size"`
 	MaxRetries int          `config:"max_retries"`
-	TableName  string       `config:"tables"`
+	TableName  string       `config:"table_name"`
 	Columns    []string     `config:"columns"`
 }
 

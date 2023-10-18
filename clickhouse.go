@@ -27,14 +27,14 @@ import (
 	"github.com/elastic/elastic-agent-libs/config"
 )
 
-type batchRows map[string]tableData
-
-type tableData struct {
-	Table     string
-	Columns   []string
-	Rows      [][]interface{}
-	EventKeys []int
-}
+//type batchRows map[string]tableData
+//
+//type tableData struct {
+//	Table     string
+//	Columns   []string
+//	Rows      [][]interface{}
+//	EventKeys []int
+//}
 
 func init() {
 	outputs.RegisterType("clickhouse", makeClickHouse)
@@ -43,6 +43,8 @@ func init() {
 func makeClickHouse(_ outputs.IndexManager, beat beat.Info, observer outputs.Observer, cfg *config.C) (outputs.Group,
 	error) {
 	config := defaultConfig
+	fmt.Printf("config==>%+v", config)
+
 	err := cfg.Unpack(&config)
 	if err != nil {
 		return outputs.Fail(err)
@@ -61,6 +63,8 @@ func makeClickHouse(_ outputs.IndexManager, beat beat.Info, observer outputs.Obs
 	}
 
 	index := beat.Beat
+
+	fmt.Printf("index==>%s", index)
 	c, err := newClient(config, observer, enc, index)
 	if err != nil {
 		return outputs.Fail(fmt.Errorf("clickhouse output initialization failed with: %v", err))

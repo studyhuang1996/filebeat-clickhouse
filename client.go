@@ -41,6 +41,18 @@ type client struct {
 	codec    codec.Codec
 	index    string
 }
+type ValueWithIndex struct {
+	val []interface{}
+}
+type ClickHouseDescType struct {
+	Name              string `db:"name"`
+	Type              string `db:"type"`
+	DefaultType       string `db:"default_type"`
+	DefaultExpression string `db:"default_expression"`
+	Comment           string `db:"comment"`
+	CodecExpression   string `db:"codec_expression"`
+	TTLExpression     string `db:"ttl_expression"`
+}
 
 func newClient(cfg Config, observer outputs.Observer, codec codec.Codec, index string) (*client, error) {
 	c := &client{
@@ -101,9 +113,10 @@ func (c *client) Close() error {
 	return c.Conn.Close()
 }
 
-func (c *client) Publish(_ context.Context, batch publisher.Batch) error {
+func (c *client) Publish(ctx context.Context, batch publisher.Batch) error {
 	st := c.observer
 	events := batch.Events()
+	c.log.Debugf("本次事件数量: %d", len(events))
 
 	batchData, succEventNum := c.getBatchRows(events)
 	if succEventNum == 0 {
@@ -121,26 +134,29 @@ func (c *client) Publish(_ context.Context, batch publisher.Batch) error {
 	retryEvents := make([]publisher.Event, 0)
 	sendDroped := 0
 	var lastErr error
-	for _, v := range batchData {
-
-		if err := c.sendToTables(v); err != nil {
-			c.log.Errorf("send to table err: %v", err)
-			lastErr = err
-
-			// dial tcp 10.32.20.146:9000: connect: connection refused
-			// dial tcp: lookup clickhouse on 127.0.0.11:53: server misbehaving"
-			if strings.Contains(fmt.Sprintf("%s", err), "connection refused") || strings.Contains(fmt.Sprintf("%s", err), "server misbehaving") {
-				for _, e_key := range v.EventKeys {
-					retryEvents = append(retryEvents, events[e_key])
-				}
-				c.log.Errorf("connect ck refused, will retry evnet: %d", len(v.EventKeys))
-			} else { //other error
-				sendDroped += len(v.EventKeys)
-			}
-		} else {
-			c.log.Infof("insert num %d", len(v.EventKeys))
-		}
+	err := c.batchInsertCk(batchData)
+	if err != nil {
+		c.log.Errorf("batch size to err: %v", err)
+		return err
 	}
+
+	// if err := c.batchInsertCk(batchData); err != nil {
+	// 	c.log.Errorf("send to table err: %v", err)
+	// 	lastErr = err
+
+	// 	// dial tcp 10.32.20.146:9000: connect: connection refused
+	// 	// dial tcp: lookup clickhouse on 127.0.0.11:53: server misbehaving"
+	// 	if strings.Contains(fmt.Sprintf("%s", err), "connection refused") || strings.Contains(fmt.Sprintf("%s", err), "server misbehaving") {
+	// 		for _, e_key := range v.EventKeys {
+	// 			retryEvents = append(retryEvents, events[e_key])
+	// 		}
+	// 		c.log.Errorf("connect ck refused, will retry evnet: %d", len(v.EventKeys))
+	// 	} else { //other error
+	// 		sendDroped += len(v.EventKeys)
+	// 	}
+	// } else {
+	// 	c.log.Infof("insert num %d", len(v.EventKeys))
+	// }
 
 	st.Dropped(sendDroped)
 	st.Acked(len(events) - filterDroped - sendDroped)
@@ -160,65 +176,132 @@ func (c *client) String() string {
 }
 
 // split table rows
-func (c *client) getBatchRows(data []publisher.Event) (batchRows, int) {
-	batchs := make(batchRows)
+func (c *client) getBatchRows(data []publisher.Event) ([]map[string]interface{}, int) {
 	succEventNum := 0
+	var bulkItems []map[string]interface{}
 
 	for index := range data {
+		item := make(map[string]interface{})
 		event := &data[index].Content
-		bulkItems := []interface{}{}
-
+		fmt.Printf("==>event: %v\n", event)
 		for _, column := range c.config.Columns {
-			row, _ := event.GetValue(column)
-			bulkItems = append(bulkItems, row)
-		}
-		succEventNum++
-		lineRow := make([][]interface{}, 0)
-		eventKeys := make([]int, 0)
-		lineRow = append(lineRow, bulkItems)
-		eventKeys = append(eventKeys, index)
-		batchs[c.config.TableName] = tableData{
-			Table:     c.config.TableName,
-			Columns:   c.config.Columns,
-			Rows:      lineRow,
-			EventKeys: eventKeys,
-		}
-
-	}
-	return batchs, succEventNum
-}
-
-func (c *client) sendToTables(v tableData) error {
-	tableName := v.Table
-	columnStr := strings.Join(v.Columns, ",")
-	sql := fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES ", c.config.DbName, tableName, columnStr)
-
-	num := 0
-	for _, line := range v.Rows {
-		valueStr := "("
-		for _, column := range line {
-			//nested type
-			if reflect.TypeOf(column).String() == "[]interface {}" {
-				valueStr += "[" + generateQuotaStr(column.([]interface{})) + "],"
-			} else {
-				valueStr += fmt.Sprintf("'%s',", column)
+			value, err := event.Fields.GetValue(column)
+			if err != nil {
+				value = nil
 			}
+			item[column] = value
 		}
-		sql += strings.TrimRight(valueStr, ",") + "),"
-		num++
+
+		bulkItems = append(bulkItems, item)
+		succEventNum++
 	}
-
-	sql = strings.TrimRight(sql, ",")
-	c.log.Debugf("batch insert num: %d, sql: %s", num, sql)
-
-	return c.Conn.Exec(context.Background(), sql)
+	return bulkItems, succEventNum
 }
 
-func generateQuotaStr(data []interface{}) string {
-	var str string
-	for _, v := range data {
-		str += fmt.Sprintf("'%s',", v)
+func (c *client) batchInsertCk(rowsData []map[string]interface{}) error {
+	columnStr := strings.Join(c.config.Columns, ",")
+	sql := fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES ", c.config.DbName, c.config.TableName, columnStr)
+	bulk, err := c.Conn.PrepareBatch(context.Background(), sql)
+	if err != nil {
+		c.log.Errorf("批量预处理sql语句错误,%s", sql)
+		return err
 	}
-	str = strings.TrimRight(str, ",")
-	return str
+	vals, err := c.PrepareData(rowsData)
+	if err != nil {
+		c.log.Errorf("批量预处理数据错误,", err)
+		return err
+	}
+
+	if len(vals) == 0 {
+		// 如果 vals 为空，可以直接返回或者抛出错误
+		return nil
+	}
+
+	for _, val := range vals {
+		fmt.Printf("==>val: %v\n", val)
+		err = bulk.Append(val[:]...)
+		if err != nil {
+			c.log.Errorf("batch add num failed", val)
+			return err
+		}
+	}
+	c.log.Debugf("batch insert num: %d, sql: %s", len(vals), sql)
+	return bulk.Send()
 }
+
+func (c *client) PrepareData(batchData []map[string]interface{}) ([][]interface{}, error) {
+	var rows [][]interface{}
+	for _, data := range batchData {
+		fmt.Printf("column,%s", data)
+		result := make([]interface{}, len(c.config.Columns))
+		for index, column := range c.config.Columns {
+			v, ok := data[column]
+			fmt.Printf("column12134,%s,%s,%s", v, column, ok)
+			if !ok {
+				c.log.Debugf("column %s not found", column)
+				result[index] = nil
+				continue
+			}
+			if v == nil {
+				result[index] = nil
+				continue
+			}
+			fmt.Printf("clickhousetYPE,%s,%s", column, reflect.TypeOf(v).String())
+			value, err := toClickhouseType(v, reflect.TypeOf(v).String())
+			if err != nil {
+				return nil, err
+			}
+			result[index] = value
+		}
+		rows = append(rows, result)
+	}
+	return rows, nil
+}
+
+//func (c *client) clickhouseTableDesc() ([]*ClickHouseDescType, error) {
+//	var descTypes []*ClickHouseDescType
+//	rows, err := c.Conn.Query(context.Background(), "DESC "+c.config.DbName+"."+c.config.TableName)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	for rows.Next() {
+//		var descType ClickHouseDescType
+//		err = rows.Scan(&descType.Name, &descType.Type, &descType.DefaultType, &descType.DefaultExpression, &descType.Comment, &descType.CodecExpression, &descType.TTLExpression)
+//		if err != nil {
+//			return nil, err
+//		}
+//
+//		descTypes = append(descTypes, &descType)
+//	}
+//	defer rows.Close()
+//
+//	return descTypes, nil
+//}
+//
+//func (c *client) clickhouseColumns() error {
+//	descTypes, err := c.clickhouseTableDesc()
+//	if err != nil {
+//		return err
+//	}
+//
+//	columnType := make(map[string]string)
+//	for _, item := range descTypes {
+//		columnType[item.Name] = item.Type
+//	}
+//	c.columnsType = columnType
+//
+//	if len(c.columns) == 0 {
+//		for _, desc := range descTypes {
+//			w.columns = append(w.columns, desc.Name)
+//		}
+//	}
+//
+//	for _, column := range w.columns {
+//		_, ok := columnType[column]
+//		if !ok {
+//			return errors.New(column + " not in " + w.database + " " + w.table)
+//		}
+//	}
+//	return nil
+//}

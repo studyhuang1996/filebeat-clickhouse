@@ -6,12 +6,16 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.14.3
 	github.com/elastic/beats/v7 v7.17.14
 	github.com/elastic/elastic-agent-libs v0.5.0
+	github.com/google/uuid v1.3.1
+	github.com/spf13/cast v1.5.1
+	github.com/stretchr/testify v1.8.4
 )
 
 require (
 	github.com/ClickHouse/ch-go v0.58.2 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/elastic/elastic-agent-client/v7 v7.0.0-20210727140539-f0905d9377f6 // indirect
 	github.com/elastic/go-structform v0.0.9 // indirect
 	github.com/elastic/go-sysinfo v1.8.1 // indirect
@@ -22,7 +26,6 @@ require (
 	github.com/go-faster/errors v0.6.1 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/uuid v1.3.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/joeshaw/multierror v0.0.0-20140124173710-69b34d4ec901 // indirect
@@ -33,6 +36,7 @@ require (
 	github.com/paulmach/orb v0.10.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.18 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/santhosh-tekuri/jsonschema v1.2.4 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
