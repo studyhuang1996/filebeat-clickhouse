@@ -137,29 +137,10 @@ func (c *client) Publish(ctx context.Context, batch publisher.Batch) error {
 	err := c.batchInsertCk(batchData)
 	if err != nil {
 		c.log.Errorf("batch size to err: %v", err)
-		return err
+		retryEvents = append(retryEvents, events)
 	}
-
-	// if err := c.batchInsertCk(batchData); err != nil {
-	// 	c.log.Errorf("send to table err: %v", err)
-	// 	lastErr = err
-
-	// 	// dial tcp 10.32.20.146:9000: connect: connection refused
-	// 	// dial tcp: lookup clickhouse on 127.0.0.11:53: server misbehaving"
-	// 	if strings.Contains(fmt.Sprintf("%s", err), "connection refused") || strings.Contains(fmt.Sprintf("%s", err), "server misbehaving") {
-	// 		for _, e_key := range v.EventKeys {
-	// 			retryEvents = append(retryEvents, events[e_key])
-	// 		}
-	// 		c.log.Errorf("connect ck refused, will retry evnet: %d", len(v.EventKeys))
-	// 	} else { //other error
-	// 		sendDroped += len(v.EventKeys)
-	// 	}
-	// } else {
-	// 	c.log.Infof("insert num %d", len(v.EventKeys))
-	// }
-
 	st.Dropped(sendDroped)
-	st.Acked(len(events) - filterDroped - sendDroped)
+	st.Acked(len(events) - filterDroped)
 
 	if len(retryEvents) > 0 {
 		batch.RetryEvents(retryEvents)
@@ -212,16 +193,11 @@ func (c *client) batchInsertCk(rowsData []map[string]interface{}) error {
 		return err
 	}
 
-	if len(vals) == 0 {
-		// 如果 vals 为空，可以直接返回或者抛出错误
-		return nil
-	}
-
 	for _, val := range vals {
 		fmt.Printf("==>val: %v\n", val)
 		err = bulk.Append(val[:]...)
 		if err != nil {
-			c.log.Errorf("batch add num failed", val)
+			c.log.Errorf("batch add data failed", val)
 			return err
 		}
 	}

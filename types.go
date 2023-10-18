@@ -2,6 +2,7 @@ package clickhouse
 
 import (
 	"errors"
+	"fmt"
 	"github.com/elastic/elastic-agent-libs/mapstr"
 	"github.com/google/uuid"
 	"github.com/spf13/cast"
@@ -45,7 +46,7 @@ func toClickhouseType(value interface{}, valueType string) (interface{}, error) 
 		if value == nil {
 			return nil, nil
 		}
-		return value.(map[string]interface{}), nil
+		return convertMap(value.(map[string]interface{})), nil
 	case "mapstr.M":
 		var val = value.(mapstr.M)
 		if len(val) == 0 {
@@ -55,23 +56,23 @@ func toClickhouseType(value interface{}, valueType string) (interface{}, error) 
 		for k, v := range val {
 			m2[k] = v
 		}
-		return m2, nil
+		return convertMap(m2), nil
 	default:
 		return "", errors.New("unsupported type:" + valueType)
 	}
 }
 
-//func convertMap(originalMap map[string]interface{}) map[string]string {
-//	resultMap := make(map[string]string)
-//
-//	for key, value := range originalMap {
-//		if strValue, ok := value.(string); ok {
-//			resultMap[key] = strValue
-//		} else {
-//			strValue = fmt.Sprintf("%v", value)
-//			resultMap[key] = strValue
-//		}
-//	}
-//
-//	return resultMap
-//}
+func convertMap(originalMap map[string]interface{}) map[string]string {
+	resultMap := make(map[string]string)
+
+	for key, value := range originalMap {
+		if strValue, ok := value.(string); ok {
+			resultMap[key] = strValue
+		} else {
+			strValue = fmt.Sprintf("%v", value)
+			resultMap[key] = strValue
+		}
+	}
+
+	return resultMap
+}
