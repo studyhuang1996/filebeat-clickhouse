@@ -21,7 +21,7 @@ func toClickhouseType(value interface{}, valueType string) (interface{}, error) 
 		return cast.ToInt16E(value)
 	case "int32", "Int32":
 		return cast.ToInt32E(value)
-	case "int64", "Int64":
+	case "Int64":
 		return cast.ToInt64E(value)
 	case "uInt8", "UInt8":
 		return cast.ToUint8E(value)
@@ -29,7 +29,7 @@ func toClickhouseType(value interface{}, valueType string) (interface{}, error) 
 		return cast.ToUint16E(value)
 	case "UInt32":
 		return cast.ToUint32E(value)
-	case "UInt64":
+	case "int64", "UInt64":
 		return cast.ToUint64E(value)
 	case "ipv4", "IPv4", "IPv6":
 		ip, _, err := net.ParseCIDR(value.(string))

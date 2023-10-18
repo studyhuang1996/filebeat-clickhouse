@@ -17,6 +17,7 @@
 
 package clickhouse
 
+import "C"
 import (
 	"context"
 	"errors"
@@ -34,13 +35,15 @@ import (
 )
 
 type client struct {
-	log      *logp.Logger
-	config   Config
-	Conn     clickhouse.Conn
-	observer outputs.Observer
-	codec    codec.Codec
-	index    string
+	log         *logp.Logger
+	config      Config
+	Conn        clickhouse.Conn
+	observer    outputs.Observer
+	codec       codec.Codec
+	index       string
+	columnsType map[string]string
 }
+
 type ValueWithIndex struct {
 	val []interface{}
 }
@@ -124,6 +127,10 @@ func (c *client) Publish(ctx context.Context, batch publisher.Batch) error {
 		c.log.Errorf("batch drop")
 		return errors.New("batch filter row failed, batch droped")
 	}
+	//err := c.clickhouseColumns()
+	//if err != nil {
+	//	return err
+	//}
 
 	st.NewBatch(len(events))
 	filterDroped := len(events) - succEventNum
@@ -137,6 +144,9 @@ func (c *client) Publish(ctx context.Context, batch publisher.Batch) error {
 	err := c.batchInsertCk(batchData)
 	if err != nil {
 		c.log.Errorf("batch size to err: %v", err)
+		for index, _ := range events {
+			retryEvents = append(retryEvents, events[index])
+		}
 		retryEvents = append(retryEvents, events)
 	}
 	st.Dropped(sendDroped)
@@ -194,7 +204,6 @@ func (c *client) batchInsertCk(rowsData []map[string]interface{}) error {
 	}
 
 	for _, val := range vals {
-		fmt.Printf("==>val: %v\n", val)
 		err = bulk.Append(val[:]...)
 		if err != nil {
 			c.log.Errorf("batch add data failed", val)
@@ -234,50 +243,50 @@ func (c *client) PrepareData(batchData []map[string]interface{}) ([][]interface{
 	return rows, nil
 }
 
-//func (c *client) clickhouseTableDesc() ([]*ClickHouseDescType, error) {
-//	var descTypes []*ClickHouseDescType
-//	rows, err := c.Conn.Query(context.Background(), "DESC "+c.config.DbName+"."+c.config.TableName)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	for rows.Next() {
-//		var descType ClickHouseDescType
-//		err = rows.Scan(&descType.Name, &descType.Type, &descType.DefaultType, &descType.DefaultExpression, &descType.Comment, &descType.CodecExpression, &descType.TTLExpression)
-//		if err != nil {
-//			return nil, err
-//		}
-//
-//		descTypes = append(descTypes, &descType)
-//	}
-//	defer rows.Close()
-//
-//	return descTypes, nil
-//}
-//
-//func (c *client) clickhouseColumns() error {
-//	descTypes, err := c.clickhouseTableDesc()
-//	if err != nil {
-//		return err
-//	}
-//
-//	columnType := make(map[string]string)
-//	for _, item := range descTypes {
-//		columnType[item.Name] = item.Type
-//	}
-//	c.columnsType = columnType
-//
-//	if len(c.columns) == 0 {
-//		for _, desc := range descTypes {
-//			w.columns = append(w.columns, desc.Name)
-//		}
-//	}
-//
-//	for _, column := range w.columns {
-//		_, ok := columnType[column]
-//		if !ok {
-//			return errors.New(column + " not in " + w.database + " " + w.table)
-//		}
-//	}
-//	return nil
-//}
+func (c *client) clickhouseTableDesc() ([]*ClickHouseDescType, error) {
+	var descTypes []*ClickHouseDescType
+	rows, err := c.Conn.Query(context.Background(), "DESC "+c.config.DbName+"."+c.config.TableName)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var descType ClickHouseDescType
+		err = rows.Scan(&descType.Name, &descType.Type, &descType.DefaultType, &descType.DefaultExpression, &descType.Comment, &descType.CodecExpression, &descType.TTLExpression)
+		if err != nil {
+			return nil, err
+		}
+
+		descTypes = append(descTypes, &descType)
+	}
+	defer rows.Close()
+
+	return descTypes, nil
+}
+
+func (c *client) clickhouseColumns() error {
+	descTypes, err := c.clickhouseTableDesc()
+	if err != nil {
+		return err
+	}
+
+	columnType := make(map[string]string)
+	for _, item := range descTypes {
+		columnType[item.Name] = item.Type
+	}
+	c.columnsType = columnType
+
+	if len(c.config.Columns) == 0 {
+		for _, desc := range descTypes {
+			c.config.Columns = append(c.config.Columns, desc.Name)
+		}
+	}
+
+	for _, column := range c.config.Columns {
+		_, ok := columnType[column]
+		if !ok {
+			return errors.New(column + " not in " + c.config.DbName + " " + c.config.TableName)
+		}
+	}
+	return nil
+}
