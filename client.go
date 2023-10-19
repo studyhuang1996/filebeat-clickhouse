@@ -199,7 +199,6 @@ func (c *client) batchInsertCk(rowsData []map[string]interface{}) error {
 		c.log.Errorf("批量预处理数据错误,", err)
 		return err
 	}
-	fmt.Printf("============>debug", vals)
 	for _, val := range vals {
 		err = bulk.Append(val[:]...)
 		if err != nil {
