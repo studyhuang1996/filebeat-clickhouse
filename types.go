@@ -10,9 +10,6 @@ import (
 )
 
 func toClickhouseType(value interface{}, valueType string) (interface{}, error) {
-	if value == nil {
-		return nil, nil
-	}
 	switch valueType {
 	case "float32", "Float32":
 		return cast.ToFloat32E(value)
@@ -58,7 +55,7 @@ func toClickhouseType(value interface{}, valueType string) (interface{}, error) 
 		return cast.ToStringE(value)
 	case "Map(String, String)", "map[string]interface {}":
 		if value == nil {
-			return nil, nil
+			return map[string]string{}, nil
 		}
 		if m, ok := value.(map[string]interface{}); ok {
 			return convertMap(m), nil
@@ -66,7 +63,7 @@ func toClickhouseType(value interface{}, valueType string) (interface{}, error) 
 			if m, ok := value.(mapstr.M); ok {
 				return convertCustomMap(m), nil
 			}
-			return nil, errors.New("unsupported values:" + value.(string))
+			return map[string]string{}, errors.New("unsupported values:" + value.(string))
 		}
 	default:
 		return "", errors.New("unsupported type:" + valueType)

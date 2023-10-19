@@ -56,6 +56,10 @@ type ClickHouseDescType struct {
 	TTLExpression     string `db:"ttl_expression"`
 }
 
+const (
+	MAP_TYPE = "Map(String, String)"
+)
+
 func newClient(cfg Config, observer outputs.Observer, codec codec.Codec, index string) (*client, error) {
 	c := &client{
 		log:      logp.NewLogger("clickhouse"),
@@ -120,16 +124,17 @@ func (c *client) Publish(ctx context.Context, batch publisher.Batch) error {
 	events := batch.Events()
 	c.log.Debugf("本次事件数量: %d", len(events))
 
+	errColumns := c.clickhouseColumns()
+	if errColumns != nil {
+		c.log.Errorf("get table columns failed", errColumns)
+		return errColumns
+	}
+
 	batchData, succEventNum := c.getBatchRows(events)
 	if succEventNum == 0 {
 		batch.Drop()
 		c.log.Errorf("batch drop")
 		return errors.New("batch filter row failed, batch droped")
-	}
-	errColumns := c.clickhouseColumns()
-	if errColumns != nil {
-		c.log.Errorf("get table columns failed", errColumns)
-		return errColumns
 	}
 
 	st.NewBatch(len(events))
@@ -165,22 +170,16 @@ func (c *client) String() string {
 	return "clickhouse"
 }
 
-// split table rows
 func (c *client) getBatchRows(data []publisher.Event) ([]map[string]interface{}, int) {
 	succEventNum := 0
 	var bulkItems []map[string]interface{}
-
 	for index := range data {
 		item := make(map[string]interface{})
 		event := &data[index].Content
 		for _, column := range c.config.Columns {
-			value, err := event.Fields.GetValue(column)
-			if err != nil {
-				value = nil
-			}
+			value, _ := event.GetValue(column)
 			item[column] = value
 		}
-
 		bulkItems = append(bulkItems, item)
 		succEventNum++
 	}
@@ -200,7 +199,7 @@ func (c *client) batchInsertCk(rowsData []map[string]interface{}) error {
 		c.log.Errorf("批量预处理数据错误,", err)
 		return err
 	}
-
+	fmt.Printf("============>debug", vals)
 	for _, val := range vals {
 		err = bulk.Append(val[:]...)
 		if err != nil {
@@ -218,17 +217,17 @@ func (c *client) PrepareData(batchData []map[string]interface{}) ([][]interface{
 		result := make([]interface{}, len(c.config.Columns))
 		for index, column := range c.config.Columns {
 			v, ok := data[column]
-			if !ok {
-				c.log.Debugf("column %s not found", column)
-				result[index] = nil
-				continue
-			}
-			if v == nil {
-				result[index] = nil
+			if !ok || v == nil {
+				if MAP_TYPE == c.columnsType[column] {
+					result[index] = map[string]string{}
+				} else {
+					result[index] = nil
+				}
 				continue
 			}
 			value, err := toClickhouseType(v, c.columnsType[column])
 			if err != nil {
+				c.log.Errorf("toClickhouseType failed, %s", err)
 				return nil, err
 			}
 			result[index] = value
