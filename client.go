@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"strings"
 	"time"
 
@@ -127,10 +126,11 @@ func (c *client) Publish(ctx context.Context, batch publisher.Batch) error {
 		c.log.Errorf("batch drop")
 		return errors.New("batch filter row failed, batch droped")
 	}
-	//err := c.clickhouseColumns()
-	//if err != nil {
-	//	return err
-	//}
+	errColumns := c.clickhouseColumns()
+	if errColumns != nil {
+		c.log.Errorf("get table columns failed", errColumns)
+		return errColumns
+	}
 
 	st.NewBatch(len(events))
 	filterDroped := len(events) - succEventNum
@@ -147,7 +147,6 @@ func (c *client) Publish(ctx context.Context, batch publisher.Batch) error {
 		for index, _ := range events {
 			retryEvents = append(retryEvents, events[index])
 		}
-		retryEvents = append(retryEvents, events)
 	}
 	st.Dropped(sendDroped)
 	st.Acked(len(events) - filterDroped)
@@ -174,7 +173,6 @@ func (c *client) getBatchRows(data []publisher.Event) ([]map[string]interface{},
 	for index := range data {
 		item := make(map[string]interface{})
 		event := &data[index].Content
-		fmt.Printf("==>event: %v\n", event)
 		for _, column := range c.config.Columns {
 			value, err := event.Fields.GetValue(column)
 			if err != nil {
@@ -217,11 +215,9 @@ func (c *client) batchInsertCk(rowsData []map[string]interface{}) error {
 func (c *client) PrepareData(batchData []map[string]interface{}) ([][]interface{}, error) {
 	var rows [][]interface{}
 	for _, data := range batchData {
-		fmt.Printf("column,%s", data)
 		result := make([]interface{}, len(c.config.Columns))
 		for index, column := range c.config.Columns {
 			v, ok := data[column]
-			fmt.Printf("column12134,%s,%s,%s", v, column, ok)
 			if !ok {
 				c.log.Debugf("column %s not found", column)
 				result[index] = nil
@@ -231,8 +227,7 @@ func (c *client) PrepareData(batchData []map[string]interface{}) ([][]interface{
 				result[index] = nil
 				continue
 			}
-			fmt.Printf("clickhousetYPE,%s,%s", column, reflect.TypeOf(v).String())
-			value, err := toClickhouseType(v, reflect.TypeOf(v).String())
+			value, err := toClickhouseType(v, c.columnsType[column])
 			if err != nil {
 				return nil, err
 			}
