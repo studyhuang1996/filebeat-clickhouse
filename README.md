@@ -42,7 +42,7 @@
 
 
 ## 使用配置
- * 原始文档, 格式化成JSON 结构
+ * 原始文档, 格式化成JSON 结构，同步到 CK 的字段 要在 JSON 的第一级
   ```
    1、原始文本
    { "timestamp": "2023-08-22 09:07:16", "id": 0, "class": "connection", "event": "connect", "connection_id": 9, 
