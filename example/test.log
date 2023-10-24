@@ -1,0 +1,9 @@
+{ "timestamp": "2023-08-22 09:06:58", "id": 0, "class": "audit1", "event": "startup1", "connection_id": 0 }
+{ "timestamp": "2023-08-23 09:06:58", "id": 2, "class": "audit2", "event": "startup2", "connection_id": 1 }
+{ "timestamp": "2023-08-24 09:06:58", "id": 0, "class": "audit3", "event": "startup3", "connection_id": 2 }
+{ "timestamp": "2023-08-25 09:06:58", "id": 0, "class": "audit4", "event": "startup4", "connection_id": 3 }
+
+
+
+
+

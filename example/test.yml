@@ -1,0 +1,59 @@
+
+
+#限制一个 CPU 核心，避免过多抢占业务资源
+max_procs: 1
+# 存储于内存队列的事件数，排队发送（4096）
+queue.mem.events: 2048
+#默认2048,增大可提高吞吐量
+queue.mem.flush.min_events: 1536
+
+
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+      # 日志实际路径地址
+    - test.log
+  json.keys_under_root: true
+  json.overwrite_keys: true
+
+
+
+
+# ---------------------------- ClickHouse Output ----------------------------
+output.clickhouse:
+  host: "127.0.0.1:9000"
+  username: "xxxx"
+  password: "zzzz"
+  db_name: "xxxxx"
+  table_name: "TEST"
+  #可写可不写
+  # columns: ["timestamp","id","class","event","connection_id"]
+  batch_size: 1000
+
+
+
+# ================================= Processors ================================= 
+processors:
+  - decode_json_fields:
+      fields: ["message"]
+      target: ""
+      overwrite_keys: true
+      add_error_key: true
+  # 上一步的decode 会解析完，出现多一条错误记录。过滤掉 Error decoding JSON: EOF    
+  - script:
+      lang: javascript
+      source: >
+        function process(event) {
+           var json =  event.Get("json")
+           if(json){
+            event.Cancel();
+            return
+           }
+        }
+  - add_fields:
+      target: ''
+      fields:
+        new_field: '新增字段'
+
+

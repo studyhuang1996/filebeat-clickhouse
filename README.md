@@ -89,7 +89,7 @@ filebeat.inputs:
   enabled: true
   paths:
       # 日志实际路径地址
-    - C:\Users\Administrator\Desktop\test.log
+    - test.log
   json.keys_under_root: true
   json.overwrite_keys: true
   json.add_error_key: true
@@ -122,3 +122,4 @@ processors:
       fields:
         ADD_TEST: '新增字段'
 ```
+ * 更多请看示例 demo
