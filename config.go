@@ -29,6 +29,9 @@ type Config struct {
 	MaxRetries int          `config:"max_retries"`
 	TableName  string       `config:"table_name"`
 	Columns    []string     `config:"columns"`
+	ssl        bool         `config:"ssl"`
 }
 
-var defaultConfig = Config{}
+var defaultConfig = Config{
+	ssl: false,
+}

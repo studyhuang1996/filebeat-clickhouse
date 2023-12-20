@@ -20,6 +20,7 @@ package clickhouse
 import "C"
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -72,8 +73,7 @@ func newClient(cfg Config, observer outputs.Observer, codec codec.Codec, index s
 }
 
 func (c *client) Connect() error {
-
-	conn, err := clickhouse.Open(&clickhouse.Options{
+	options := &clickhouse.Options{
 		Addr: []string{c.config.Host},
 		Auth: clickhouse.Auth{
 			Database: c.config.DbName,
@@ -99,7 +99,13 @@ func (c *client) Connect() error {
 		MaxIdleConns:     5,
 		ConnMaxLifetime:  time.Duration(10) * time.Minute,
 		ConnOpenStrategy: clickhouse.ConnOpenInOrder,
-	})
+	}
+	if c.config.ssl {
+		options.TLS = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+	conn, err := clickhouse.Open(options)
 	if err != nil {
 		c.log.Errorw("can not connect clickhouse server", "host", c.config.Host)
 		return err
