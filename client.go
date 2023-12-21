@@ -100,7 +100,7 @@ func (c *client) Connect() error {
 		ConnMaxLifetime:  time.Duration(10) * time.Minute,
 		ConnOpenStrategy: clickhouse.ConnOpenInOrder,
 	}
-	if c.config.ssl {
+	if c.config.Ssl {
 		options.TLS = &tls.Config{
 			InsecureSkipVerify: true,
 		}
